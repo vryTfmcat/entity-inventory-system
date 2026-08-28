@@ -1,0 +1,20 @@
+# Personal operational notes and source artwork stay in the Obsidian vault.
+/实体物品盘点系统.md
+/实现与验收状态.md
+/标签制作与现场盘点.md
+/迁移候选清单.md
+/锦绣江南地点与容器建档.md
+/设计/
+/安卓原型/库外工具链说明.md
+
+# Local releases and generated Android artifacts.
+/发布/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Editor and operating-system noise.
+.DS_Store
+Thumbs.db
+desktop.ini

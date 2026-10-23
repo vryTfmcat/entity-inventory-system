@@ -22,6 +22,7 @@ APK 与构建缓存不进入 Git。使用下面的构建命令生成调试安装
 - 二维码 vCard 生成与相机连续扫描；
 - 二维码/NFC 统一观测、跨方式去重；
 - 全量、地点、类别、容器、临时范围和携带清单冻结快照；
+- 混合携带清单：实体可扫码确认，普通文字物品可手动勾选，出发前事项单独核对；
 - 缺件例外、批次数量、差异分类、草稿暂停/恢复和追加式盘点记录；
 - 扫描用手机的 `self_device` 观测入口；
 - 为未来 UHF 保留 `ScanMethod.UHF`。
@@ -39,7 +40,7 @@ APK 与构建缓存不进入 Git。使用下面的构建命令生成调试安装
 
 项目位于中文路径时，Android/Gradle 的 Windows 测试 worker 可能无法载入已经编译的测试类。`build-windows.ps1` 会临时映射一个纯 ASCII 盘符，完成测试与 APK 构建后自动还原 `local.properties` 并解除盘符。也可分别运行 `-Target test` 或 `-Target assembleDebug`。
 
-当前电脑原先只有 JDK 11 且没有 Android SDK，因此项目同时提供 `scripts/bootstrap-android.ps1`，把命令行工具安装在本项目的 `.tooling/` 内，不修改系统级 Android Studio 配置。
+ThinkBook 使用已登记的库外 JDK/SDK；`scripts/bootstrap-android.ps1` 也已改为把工具链安装到库外 `实体物品盘点系统/Android SDK/.tooling/`，不再写入 Vault。构建请运行上述 `build-windows.ps1`。
 
 ## 首次使用
 
@@ -50,3 +51,7 @@ APK 与构建缓存不进入 Git。使用下面的构建命令生成调试安装
 5. 新建物品后生成二维码，并进入 NFC 写入模式；写入内容包括联系电话、`tagId`、物品名称和 App 唤起记录；
 6. 点击已有物品可修改地点和容器，也可直接新增地点/容器；批量整理可进入底部“整理”，长按物品卡使其保持选中，再滑动到顶部宫格投放区并点击目标；
 7. 读回两种载荷一致后再激活标签。
+
+## 2026-10-15 存储更新
+
+源码仍是本目录的轻量工作树；构建输出和项目缓存默认写入 `%USERPROFILE%/Documents/Codex/build-cache/entity-inventory/`。保留的安装包在库外项目 `实体物品盘点系统/releases/2026-10-15_140432/app-debug.apk`，详见 [[库外工具链说明]]。

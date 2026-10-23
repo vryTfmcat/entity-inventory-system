@@ -1,11 +1,11 @@
-param(
+﻿param(
     [string]$AndroidApi = "35",
     [string]$BuildTools = "35.0.0"
 )
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path $PSScriptRoot -Parent
-$toolingRoot = Join-Path $projectRoot ".tooling"
+$toolingRoot = Join-Path $env:USERPROFILE "Documents/Codex/codex资料/项目/实体物品盘点系统/Android SDK/.tooling"
 $jdkRoot = Join-Path $toolingRoot "jdk-17"
 $sdkRoot = Join-Path $toolingRoot "android-sdk"
 $downloads = Join-Path $toolingRoot "downloads"
@@ -71,4 +71,4 @@ if (-not (Test-Path $wrapperJar)) {
 Write-Host "Android toolchain ready."
 Write-Host "JAVA_HOME=$jdkRoot"
 Write-Host "ANDROID_SDK_ROOT=$sdkRoot"
-Write-Host "Run: .\gradlew.bat test assembleDebug"
+Write-Host "Run: .\scripts\build-windows.ps1 -Target verify"

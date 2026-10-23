@@ -22,6 +22,11 @@ object AuditDraftCodec {
             "expectedEntityIds" to snapshot.expectedEntityIds.sorted(),
             "requiredEntityIds" to snapshot.requiredEntityIds.sorted(),
             "quantityRequiredEntityIds" to snapshot.quantityRequiredEntityIds.sorted(),
+            "manualRequiredItems" to snapshot.manualRequiredItems,
+            "manualOptionalItems" to snapshot.manualOptionalItems,
+            "preDepartureChecks" to snapshot.preDepartureChecks,
+            "checkedManualItems" to snapshot.checkedManualItems.sorted(),
+            "completedPreDepartureChecks" to snapshot.completedPreDepartureChecks.sorted(),
             "scopeValue" to snapshot.scopeValue,
             "fromPlace" to snapshot.fromPlace,
             "toPlace" to snapshot.toPlace,
@@ -53,6 +58,8 @@ object AuditDraftCodec {
         fun value(key: String): String = root[key]?.toString().orEmpty()
         fun stringSet(key: String): Set<String> = (root[key] as? Iterable<*>)
             ?.mapNotNull { it?.toString() }?.toSet().orEmpty()
+        fun stringList(key: String): List<String> = (root[key] as? Iterable<*>)
+            ?.mapNotNull { it?.toString() }?.toList().orEmpty()
         val auditId = value("auditId").ifBlank { error("草稿缺少 auditId") }
         val observations = (root["observations"] as? Iterable<*>)?.mapNotNull { entry ->
             val map = entry as? Map<*, *> ?: return@mapNotNull null
@@ -101,7 +108,12 @@ object AuditDraftCodec {
             observationResults = observationResults,
             quantityObservations = quantityObservations,
             unexpectedTagIds = stringSet("unexpectedTagIds"),
-            exceptions = exceptions
+            exceptions = exceptions,
+            manualRequiredItems = stringList("manualRequiredItems"),
+            manualOptionalItems = stringList("manualOptionalItems"),
+            preDepartureChecks = stringList("preDepartureChecks"),
+            checkedManualItems = stringSet("checkedManualItems"),
+            completedPreDepartureChecks = stringSet("completedPreDepartureChecks")
         )
     }
 }

@@ -61,7 +61,10 @@ data class LoadoutRecord(
     val optionalEntityIds: Set<String>,
     val defaultContainer: String = "",
     val sourcePath: String,
-    val contentHash: String
+    val contentHash: String,
+    val manualRequiredItems: List<String> = emptyList(),
+    val manualOptionalItems: List<String> = emptyList(),
+    val preDepartureChecks: List<String> = emptyList()
 )
 
 data class PlaceRecord(
@@ -120,7 +123,12 @@ data class AuditSnapshot(
     val observationResults: Map<String, ObservationResult> = emptyMap(),
     val quantityObservations: Map<String, Double> = emptyMap(),
     val unexpectedTagIds: Set<String> = emptySet(),
-    val exceptions: Map<String, AuditException> = emptyMap()
+    val exceptions: Map<String, AuditException> = emptyMap(),
+    val manualRequiredItems: List<String> = emptyList(),
+    val manualOptionalItems: List<String> = emptyList(),
+    val preDepartureChecks: List<String> = emptyList(),
+    val checkedManualItems: Set<String> = emptySet(),
+    val completedPreDepartureChecks: Set<String> = emptySet()
 ) {
     val observedEntityIds: Set<String> get() = observations.keys
     val missingEntityIds: Set<String> get() = expectedEntityIds - observedEntityIds
@@ -136,6 +144,12 @@ data class AuditSnapshot(
     }
     val unresolvedRequiredIds: Set<String>
         get() = (requiredEntityIds - observedEntityIds) - exceptions.keys
+    val unresolvedManualRequiredItems: Set<String>
+        get() = manualRequiredItems.toSet() - checkedManualItems
+    val activePreDepartureChecks: List<String>
+        get() = if (scope == AuditScope.LOADOUT && action == AuditAction.DEPART) preDepartureChecks else emptyList()
+    val unresolvedPreDepartureChecks: Set<String>
+        get() = activePreDepartureChecks.toSet() - completedPreDepartureChecks
 }
 
 data class VaultSnapshot(

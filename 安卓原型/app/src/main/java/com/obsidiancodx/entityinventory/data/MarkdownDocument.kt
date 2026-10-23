@@ -47,3 +47,9 @@ internal fun Map<String, Any?>.stringSet(key: String): Set<String> = when (val v
         .split(',').map { it.trim().trim('"', '\'') }.filter { it.isNotEmpty() }.toSet()
     else -> emptySet()
 }
+internal fun Map<String, Any?>.stringList(key: String): List<String> = when (val value = this[key]) {
+    is Iterable<*> -> value.mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotEmpty) }.distinct()
+    is String -> value.removePrefix("[").removeSuffix("]")
+        .split(',').map { it.trim().trim('"', '\'') }.filter { it.isNotEmpty() }.distinct()
+    else -> emptyList()
+}

@@ -510,18 +510,63 @@ private fun AuditPage(
     }
     val missing = audit.missingEntityIds.mapNotNull { id -> items.firstOrNull { it.entityId == id } }
     Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("${audit.observations.size} / ${audit.expectedEntityIds.size} 已确认", style = MaterialTheme.typography.headlineSmall)
+        Text("实体 ${audit.observations.size} / ${audit.expectedEntityIds.size} · 手动 ${audit.checkedManualItems.size} / ${audit.manualRequiredItems.size + audit.manualOptionalItems.size}", style = MaterialTheme.typography.headlineSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onQr, enabled = audit.status == AuditStatus.IN_PROGRESS) { Icon(Icons.Default.QrCodeScanner, null); Text("二维码") }
             AssistChip(onClick = {}, label = { Text("NFC 持续监听") })
         }
         Text("未确认 ${missing.size} · 位置异常 ${audit.misplacedEntityIds.size} · 数量异常 ${audit.quantityMismatchEntityIds.size} · 额外 ${audit.extraEntityIds.size}")
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (audit.activePreDepartureChecks.isNotEmpty()) {
+                item(key = "pre-departure-heading") {
+                    Text("出发前检查", fontWeight = FontWeight.SemiBold)
+                }
+                items(audit.activePreDepartureChecks, key = { "check-$it" }) { check ->
+                    ChecklistRow(
+                        text = check,
+                        checked = check in audit.completedPreDepartureChecks,
+                        enabled = audit.status == AuditStatus.IN_PROGRESS,
+                        onToggle = { viewModel.togglePreDepartureCheck(check) }
+                    )
+                }
+            }
+            if (audit.manualRequiredItems.isNotEmpty()) {
+                item(key = "manual-required-heading") {
+                    Text("手动确认必带", fontWeight = FontWeight.SemiBold)
+                }
+                items(audit.manualRequiredItems, key = { "manual-required-$it" }) { manualItem ->
+                    ChecklistRow(
+                        text = manualItem,
+                        checked = manualItem in audit.checkedManualItems,
+                        enabled = audit.status == AuditStatus.IN_PROGRESS,
+                        onToggle = { viewModel.toggleManualItem(manualItem) }
+                    )
+                }
+            }
+            if (audit.manualOptionalItems.isNotEmpty()) {
+                item(key = "manual-optional-heading") {
+                    Text("手动确认可选", fontWeight = FontWeight.SemiBold)
+                }
+                items(audit.manualOptionalItems, key = { "manual-optional-$it" }) { manualItem ->
+                    ChecklistRow(
+                        text = manualItem,
+                        checked = manualItem in audit.checkedManualItems,
+                        enabled = audit.status == AuditStatus.IN_PROGRESS,
+                        onToggle = { viewModel.toggleManualItem(manualItem) }
+                    )
+                }
+            }
+            if (missing.isNotEmpty()) {
+                item(key = "missing-entity-heading") {
+                    Text("未确认实体", fontWeight = FontWeight.SemiBold)
+                }
+            }
             items(missing, key = { it.entityId }) { item ->
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(10.dp)) {
                         Text(item.title, fontWeight = FontWeight.Medium)
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            AssistChip({ viewModel.confirmEntityManually(item.entityId) }, label = { Text("手动确认") })
                             ReasonChip("留在此处", item.entityId, MissingReason.LEFT_HERE, viewModel)
                             ReasonChip("临时不用", item.entityId, MissingReason.NOT_NEEDED, viewModel)
                             ReasonChip("无法扫描", item.entityId, MissingReason.UNSCANNABLE, viewModel)
@@ -555,6 +600,19 @@ private fun AuditPage(
                 onDismiss = viewModel::dismissQuantityInput,
                 onConfirm = { viewModel.recordQuantity(entityId, it) }
             )
+        }
+    }
+}
+
+@Composable
+private fun ChecklistRow(text: String, checked: Boolean, enabled: Boolean, onToggle: () -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onToggle).padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(checked = checked, onCheckedChange = { onToggle() }, enabled = enabled)
+            Text(text)
         }
     }
 }
@@ -644,7 +702,11 @@ private fun LoadoutPage(
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(loadout.title, fontWeight = FontWeight.SemiBold)
-                        Text("必带 ${loadout.requiredEntityIds.size} · 可选 ${loadout.optionalEntityIds.size}")
+                        Text("实体必带 ${loadout.requiredEntityIds.size} · 实体可选 ${loadout.optionalEntityIds.size}")
+                        if (loadout.manualRequiredItems.isNotEmpty() || loadout.manualOptionalItems.isNotEmpty()) {
+                            Text("手动必带 ${loadout.manualRequiredItems.size} · 手动可选 ${loadout.manualOptionalItems.size}")
+                        }
+                        if (loadout.preDepartureChecks.isNotEmpty()) Text("出发前检查 ${loadout.preDepartureChecks.size}")
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             AssistChip({ pendingStart = loadout to AuditAction.DEPART }, label = { Text("出发") })
                             AssistChip({ pendingStart = loadout to AuditAction.ARRIVE }, label = { Text("到达") })
@@ -656,8 +718,8 @@ private fun LoadoutPage(
             }
         }
     }
-    if (showCreate) CreateLoadoutDialog(items, { showCreate = false }) { title, required, optional, defaultContainer ->
-        viewModel.createLoadout(title, required, optional, defaultContainer)
+    if (showCreate) CreateLoadoutDialog(items, { showCreate = false }) { title, required, optional, defaultContainer, manualRequired, manualOptional, checks ->
+        viewModel.createLoadout(title, required, optional, defaultContainer, manualRequired, manualOptional, checks)
         showCreate = false
     }
     pendingStart?.let { (loadout, action) ->
@@ -885,21 +947,24 @@ private fun ItemTagDialog(
 private fun CreateLoadoutDialog(
     items: List<InventoryRecord>,
     onDismiss: () -> Unit,
-    onCreate: (String, Set<String>, Set<String>, String) -> Unit
+    onCreate: (String, Set<String>, Set<String>, String, List<String>, List<String>, List<String>) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var required by remember { mutableStateOf(emptySet<String>()) }
     var optional by remember { mutableStateOf(emptySet<String>()) }
     var defaultContainer by remember { mutableStateOf("") }
+    var manualRequired by remember { mutableStateOf("") }
+    var manualOptional by remember { mutableStateOf("") }
+    var preDepartureChecks by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("新建携带清单") },
         text = {
-            Column {
+            Column(Modifier.height(520.dp)) {
                 OutlinedTextField(title, { title = it }, label = { Text("名称") })
                 OutlinedTextField(defaultContainer, { defaultContainer = it }, label = { Text("默认容器/背包") })
                 Text("点击物品依次切换：未选 → 必带 → 可选 → 未选。", Modifier.padding(vertical = 8.dp))
-                LazyColumn(Modifier.height(300.dp)) {
+                LazyColumn(Modifier.height(150.dp)) {
                     items(items, key = { it.entityId }) { item ->
                         Row(
                             Modifier.fillMaxWidth().clickable {
@@ -919,12 +984,36 @@ private fun CreateLoadoutDialog(
                         }
                     }
                 }
+                OutlinedTextField(
+                    manualRequired,
+                    { manualRequired = it },
+                    label = { Text("手动确认必带，每行一项") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    manualOptional,
+                    { manualOptional = it },
+                    label = { Text("手动确认可选，每行一项") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    preDepartureChecks,
+                    { preDepartureChecks = it },
+                    label = { Text("出发前检查，每行一项") },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onCreate(title.trim(), required, optional, defaultContainer.trim()) },
-                enabled = title.isNotBlank() && required.isNotEmpty()
+                onClick = {
+                    fun lines(value: String) = value.lines().map(String::trim).filter(String::isNotEmpty).distinct()
+                    onCreate(
+                        title.trim(), required, optional, defaultContainer.trim(),
+                        lines(manualRequired), lines(manualOptional), lines(preDepartureChecks)
+                    )
+                },
+                enabled = title.isNotBlank() && (required.isNotEmpty() || manualRequired.lines().any { it.isNotBlank() })
             ) { Text("创建") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }

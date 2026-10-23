@@ -307,10 +307,17 @@ class InventoryRepository(private val context: Context) {
         title: String,
         requiredIds: Set<String>,
         optionalIds: Set<String> = emptySet(),
-        defaultContainer: String = ""
+        defaultContainer: String = "",
+        manualRequiredItems: List<String> = emptyList(),
+        manualOptionalItems: List<String> = emptyList(),
+        preDepartureChecks: List<String> = emptyList()
     ): LoadoutRecord = withContext(Dispatchers.IO) {
-        require(requiredIds.isNotEmpty()) { "携带清单至少需要一个必带物品" }
+        require(requiredIds.isNotEmpty() || manualRequiredItems.isNotEmpty()) { "携带清单至少需要一个必带物品或文字项目" }
         require((requiredIds intersect optionalIds).isEmpty()) { "同一物品不能同时必带和可选" }
+        val cleanManualRequired = manualRequiredItems.map(String::trim).filter(String::isNotEmpty).distinct()
+        val cleanManualOptional = manualOptionalItems.map(String::trim).filter(String::isNotEmpty).distinct()
+        val cleanChecks = preDepartureChecks.map(String::trim).filter(String::isNotEmpty).distinct()
+        require((cleanManualRequired intersect cleanManualOptional.toSet()).isEmpty()) { "同一文字项目不能同时必带和可选" }
         val now = OffsetDateTime.now().toString()
         val id = IdGenerator.loadoutId()
         val frontmatter = linkedMapOf<String, Any?>(
@@ -323,6 +330,9 @@ class InventoryRepository(private val context: Context) {
             "defaultContainer" to defaultContainer,
             "requiredEntityIds" to requiredIds.sorted(),
             "optionalEntityIds" to optionalIds.sorted(),
+            "manualRequiredItems" to cleanManualRequired,
+            "manualOptionalItems" to cleanManualOptional,
+            "preDepartureChecks" to cleanChecks,
             "created" to now,
             "updated" to now,
             "tags" to listOf("实体/携带清单")
@@ -337,6 +347,18 @@ class InventoryRepository(private val context: Context) {
             appendLine("## 可选")
             appendLine()
             optionalIds.sorted().forEach { appendLine("- `$it`") }
+            appendLine()
+            appendLine("## 手动确认必带")
+            appendLine()
+            cleanManualRequired.forEach { appendLine("- [ ] $it") }
+            appendLine()
+            appendLine("## 手动确认可选")
+            appendLine()
+            cleanManualOptional.forEach { appendLine("- [ ] $it") }
+            appendLine()
+            appendLine("## 出发前检查")
+            appendLine()
+            cleanChecks.forEach { appendLine("- [ ] $it") }
         }
         val created = store.createMarkdown(
             treeUri,
@@ -447,6 +469,11 @@ class InventoryRepository(private val context: Context) {
             "exceptions" to snapshot.exceptions.values.map {
                 mapOf("entityId" to it.entityId, "reason" to it.reason.wire, "note" to it.note)
             },
+            "manualRequiredItems" to snapshot.manualRequiredItems,
+            "manualOptionalItems" to snapshot.manualOptionalItems,
+            "checkedManualItems" to snapshot.checkedManualItems.sorted(),
+            "preDepartureChecks" to snapshot.activePreDepartureChecks,
+            "completedPreDepartureChecks" to snapshot.completedPreDepartureChecks.sorted(),
             "startedAt" to snapshot.startedAt,
             "completedAt" to completedAt,
             "created" to completedAt,
@@ -463,6 +490,10 @@ class InventoryRepository(private val context: Context) {
             appendLine("- 数量异常：${snapshot.quantityMismatchEntityIds.size}")
             appendLine("- 额外物品：${snapshot.extraEntityIds.size}")
             appendLine("- 未绑定标签：${snapshot.unexpectedTagIds.size}")
+            appendLine("- 手动项目：${snapshot.checkedManualItems.size} / ${snapshot.manualRequiredItems.size + snapshot.manualOptionalItems.size}")
+            if (snapshot.activePreDepartureChecks.isNotEmpty()) {
+                appendLine("- 出发前检查：${snapshot.completedPreDepartureChecks.size} / ${snapshot.activePreDepartureChecks.size}")
+            }
             appendLine()
             appendLine("## 未发现与例外")
             appendLine()
@@ -479,6 +510,20 @@ class InventoryRepository(private val context: Context) {
             appendLine("|---|---|---:|")
             snapshot.observations.keys.sorted().forEach { id ->
                 appendLine("| $id | ${snapshot.observationResults[id]?.name?.lowercase().orEmpty()} | ${snapshot.quantityObservations[id]?.toString().orEmpty()} |")
+            }
+            appendLine()
+            appendLine("## 手动项目")
+            appendLine()
+            (snapshot.manualRequiredItems + snapshot.manualOptionalItems).distinct().forEach { item ->
+                appendLine("- [${if (item in snapshot.checkedManualItems) "x" else " "}] $item")
+            }
+            if (snapshot.activePreDepartureChecks.isNotEmpty()) {
+                appendLine()
+                appendLine("## 出发前检查")
+                appendLine()
+                snapshot.activePreDepartureChecks.forEach { item ->
+                    appendLine("- [${if (item in snapshot.completedPreDepartureChecks) "x" else " "}] $item")
+                }
             }
         }
         store.createMarkdown(
@@ -529,7 +574,10 @@ class InventoryRepository(private val context: Context) {
             optionalEntityIds = fm.stringSet("optionalEntityIds"),
             defaultContainer = fm.string("defaultContainer"),
             sourcePath = file.relativePath,
-            contentHash = file.hash
+            contentHash = file.hash,
+            manualRequiredItems = fm.stringList("manualRequiredItems"),
+            manualOptionalItems = fm.stringList("manualOptionalItems"),
+            preDepartureChecks = fm.stringList("preDepartureChecks")
         )
     }
 

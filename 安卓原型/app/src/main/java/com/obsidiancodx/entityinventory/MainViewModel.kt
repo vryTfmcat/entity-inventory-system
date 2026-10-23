@@ -165,10 +165,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun createLoadout(title: String, requiredIds: Set<String>, optionalIds: Set<String>, defaultContainer: String) {
+    fun createLoadout(
+        title: String,
+        requiredIds: Set<String>,
+        optionalIds: Set<String>,
+        defaultContainer: String,
+        manualRequiredItems: List<String>,
+        manualOptionalItems: List<String>,
+        preDepartureChecks: List<String>
+    ) {
         val uri = treeUri ?: return setMessage("请先选择 Obsidian 库")
         viewModelScope.launch {
-            runCatching { repository.createLoadout(uri, title, requiredIds, optionalIds, defaultContainer) }
+            runCatching {
+                repository.createLoadout(
+                    uri, title, requiredIds, optionalIds, defaultContainer,
+                    manualRequiredItems, manualOptionalItems, preDepartureChecks
+                )
+            }
                 .onSuccess {
                     setMessage("已创建携带清单：${it.title}")
                     refresh(uri)
@@ -275,7 +288,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             quantityRequiredEntityIds = quantityRequired,
             fromPlace = fromPlace,
             toPlace = toPlace,
-            loadoutId = loadout.loadoutId
+            loadoutId = loadout.loadoutId,
+            manualRequiredItems = loadout.manualRequiredItems,
+            manualOptionalItems = loadout.manualOptionalItems,
+            preDepartureChecks = loadout.preDepartureChecks
         ))
         observeSelfDevice()
         _message.value = "已开始携带清单：${loadout.title}"
@@ -358,6 +374,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val current = _audit.value ?: return
         val updated = runCatching { AuditEngine.addException(current, AuditException(entityId, reason)) }
             .getOrElse { setMessage(it.message ?: "无法添加例外"); current }
+        updateAudit(updated)
+    }
+
+    fun confirmEntityManually(entityId: String) {
+        val current = _audit.value ?: return
+        val item = _items.value.firstOrNull { it.entityId == entityId } ?: return setMessage("找不到物品")
+        val updated = runCatching { AuditEngine.observeManually(current, item) }
+            .getOrElse { return setMessage(it.message ?: "无法手动确认物品") }
+        updateAudit(updated)
+        if (entityId in updated.quantityRequiredEntityIds) _pendingQuantityEntityId.value = entityId
+        setMessage("已手动确认：${item.title}")
+    }
+
+    fun toggleManualItem(item: String) {
+        val current = _audit.value ?: return
+        val updated = runCatching { AuditEngine.toggleManualItem(current, item) }
+            .getOrElse { return setMessage(it.message ?: "无法更新文字项目") }
+        updateAudit(updated)
+    }
+
+    fun togglePreDepartureCheck(item: String) {
+        val current = _audit.value ?: return
+        val updated = runCatching { AuditEngine.togglePreDepartureCheck(current, item) }
+            .getOrElse { return setMessage(it.message ?: "无法更新出发前检查") }
         updateAudit(updated)
     }
 

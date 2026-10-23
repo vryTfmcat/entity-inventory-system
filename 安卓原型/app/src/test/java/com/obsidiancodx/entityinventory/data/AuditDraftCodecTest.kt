@@ -22,6 +22,11 @@ class AuditDraftCodecTest {
                 fromPlace = "酒店",
                 toPlace = "车站",
                 loadoutId = "loa_test",
+                manualRequiredItems = listOf("纸巾"),
+                manualOptionalItems = listOf("零食"),
+                preDepartureChecks = listOf("给猫添水"),
+                checkedManualItems = setOf("纸巾"),
+                completedPreDepartureChecks = setOf("给猫添水"),
                 observations = mapOf(
                     "ent_a" to ScanObservation("tag_01arz3ndektsv4rrffq69g5fav", ScanMethod.QR, auditId = "aud_draft")
                 )

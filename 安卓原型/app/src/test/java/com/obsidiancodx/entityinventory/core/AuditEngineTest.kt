@@ -33,6 +33,15 @@ class AuditEngineTest {
         assertTrue((resolution as ScanResolution.Matched).duplicate)
     }
 
+    @Test
+    fun untaggedExpectedEntityCanBeConfirmedManually() {
+        val untagged = item.copy(tag = null)
+        val start = AuditSnapshot("aud_manual", AuditScope.LOADOUT, AuditAction.DEPART, setOf(untagged.entityId))
+        val observed = AuditEngine.observeManually(start, untagged)
+        assertEquals(ScanMethod.MANUAL, observed.observations[untagged.entityId]?.method)
+        assertEquals(AuditStatus.COMPLETED, AuditEngine.finish(observed).status)
+    }
+
     @Test(expected = IllegalStateException::class)
     fun requiredMissingCannotFinishSilently() {
         AuditEngine.finish(AuditSnapshot("aud_test", AuditScope.LOADOUT, AuditAction.DEPART, setOf("ent_missing")))
@@ -43,6 +52,25 @@ class AuditEngineTest {
         val start = AuditSnapshot("aud_test", AuditScope.LOADOUT, AuditAction.DEPART, setOf("ent_missing"))
         val explained = AuditEngine.addException(start, AuditException("ent_missing", MissingReason.LEFT_HERE))
         assertEquals(AuditStatus.COMPLETED_WITH_EXCEPTIONS, AuditEngine.finish(explained).status)
+    }
+
+    @Test
+    fun hybridLoadoutRequiresManualItemsAndDepartureChecks() {
+        val start = AuditSnapshot(
+            auditId = "aud_hybrid",
+            scope = AuditScope.LOADOUT,
+            action = AuditAction.DEPART,
+            expectedEntityIds = emptySet(),
+            requiredEntityIds = emptySet(),
+            manualRequiredItems = listOf("纸巾"),
+            manualOptionalItems = listOf("零食"),
+            preDepartureChecks = listOf("给猫添水")
+        )
+        assertTrue(runCatching { AuditEngine.finish(start) }.isFailure)
+        val packed = AuditEngine.toggleManualItem(start, "纸巾")
+        assertTrue(runCatching { AuditEngine.finish(packed) }.isFailure)
+        val ready = AuditEngine.togglePreDepartureCheck(packed, "给猫添水")
+        assertEquals(AuditStatus.COMPLETED, AuditEngine.finish(ready).status)
     }
 
     @Test
